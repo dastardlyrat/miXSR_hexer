@@ -4,7 +4,7 @@ RC3 production snapshot staged as a standalone Git repository.
 
 ## Usage Rights
 
-This repository is restricted to ReShade preview use only.
+This repository is restricted to ReShade preview use only, and only to the extent allowed by ReShade.
 
 - not for production use
 - not for distribution

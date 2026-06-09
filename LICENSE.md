@@ -4,13 +4,14 @@ Copyright (c) 2026 dastardlyrat
 
 All rights reserved.
 
-This repository and all files within it are provided for limited ReShade preview use only.
+This repository and all files within it are provided for limited ReShade preview use only, and only to the extent permitted by ReShade.
 
 ## Permitted Use
 
 You may:
 
 - use the contents only inside ReShade for private preview, evaluation, and testing
+- use the contents only inside ReShade for private preview, evaluation, and testing, and only as allowed by ReShade itself
 
 ## Prohibited Use
 
