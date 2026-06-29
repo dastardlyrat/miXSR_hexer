@@ -1,3 +1,4 @@
+<img width="2560" height="1440" alt="XCom2 2026-06-09 10-51-28_240" src="https://github.com/user-attachments/assets/b80b9892-3f78-4548-9fff-0fe1c54e338e" />
 # miXSR_hexer
 
 ## INTO THE LOOKING GLASS
