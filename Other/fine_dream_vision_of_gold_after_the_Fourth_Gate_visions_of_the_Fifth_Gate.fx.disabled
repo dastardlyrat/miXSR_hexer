@@ -1,0 +1,505 @@
+// Copyright (c) 2026 Alia June, Dastardly Rat, Verminis, and Maufus
+// Private release on the ReShade forum.
+// Not for distribution.
+// Not for production.
+// Licensed under LICENSE-SOURCE-AVAILABLE-RESHADE-ONLY.txt (ReShade-only; no other engines).
+// Version: dream-vision-of-gold-fifth-gate-2
+// Capability: Standalone three-pass bloom model with core, photosphere halo, and eruptive corona, tuned for white-gold warmth.
+
+
+
+#include "ReShade.fxh"
+
+#ifndef FDVGOLD_BUFFER_SCALE_LITERAL
+#define FDVGOLD_BUFFER_SCALE_LITERAL 2
+#endif
+
+uniform int FDVGOLD_DebugView <
+    ui_type = "combo";
+    ui_label = "Debug View";
+    ui_category = "Fine Cell - Bloom - Cinematic Three-Pass Star / 00 Debug"; ui_category_closed = true;
+    ui_items = "Final\0Core Pass\0Photosphere Pass\0Corona Pass\0Bloom Only\0";
+    ui_tooltip = "Shows final output or intermediate bloom stages.";
+> = 0;
+
+uniform int FDVGOLD_QualityTier <
+    ui_type = "combo";
+    ui_label = "Quality Tier";
+    ui_category = "Fine Cell - Bloom - Cinematic Three-Pass Star / 01 Guards (Respect Fog/Light)"; ui_category_closed = true;
+    ui_items = "Performance\0Balanced\0Quality\0Ultra\0";
+    ui_tooltip = "Controls sample budget for photosphere and corona passes.";
+> = 1;
+
+uniform float FDVGOLD_RayBudgetScale <
+    ui_type = "slider";
+    ui_label = "Bloom Budget Scale";
+    ui_category = "Fine Cell - Bloom - Cinematic Three-Pass Star / 01 Guards (Respect Fog/Light)"; ui_category_closed = true;
+    ui_min = 0.20;
+    ui_max = 1.00;
+    ui_step = 0.01;
+    ui_tooltip = "Scales sample count for bloom passes. Lower is faster.";
+> = 0.620000;
+
+uniform float FDVGOLD_MasterIntensity <
+    ui_type = "slider";
+    ui_label = "Master Bloom Intensity";
+    ui_category = "Fine Cell - Bloom - Cinematic Three-Pass Star / 01 Guards (Respect Fog/Light)"; ui_category_closed = true;
+    ui_min = 0.0;
+    ui_max = 3.0;
+    ui_step = 0.001;
+    ui_tooltip = "Overall intensity for all bloom stages.";
+> = 1.000000;
+
+uniform int FDVGOLD_CorePolicy <
+    ui_type = "combo";
+    ui_label = "Core Policy";
+    ui_category = "Fine Cell - Bloom - Cinematic Three-Pass Star / 01 Guards (Respect Fog/Light)"; ui_category_closed = true;
+    ui_items = "Add\0Respect\0";
+    ui_tooltip = "Add: direct glow on core. Respect: protects hot cores and pushes bloom outward.";
+> = 1;
+
+uniform float FDVGOLD_CoreRespectStrength <
+    ui_type = "slider";
+    ui_label = "Core Respect Strength";
+    ui_category = "Fine Cell - Bloom - Cinematic Three-Pass Star / 01 Guards (Respect Fog/Light)"; ui_category_closed = true;
+    ui_min = 0.0;
+    ui_max = 1.15;
+    ui_step = 0.001;
+    ui_tooltip = "How strongly bright source cores are protected in Respect mode.";
+> = 0.700000;
+
+uniform float FDVGOLD_CoreThreshold <
+    ui_type = "slider";
+    ui_label = "Core Threshold";
+    ui_category = "Fine Cell - Bloom - Cinematic Three-Pass Star / 01 Guards (Respect Fog/Light)"; ui_category_closed = true;
+    ui_min = 0.0;
+    ui_max = 2.0;
+    ui_step = 0.001;
+    ui_tooltip = "Brightness threshold used to identify source cores.";
+> = 0.720000;
+
+uniform float FDVGOLD_CoreSoftness <
+    ui_type = "slider";
+    ui_label = "Core Softness";
+    ui_category = "Fine Cell - Bloom - Cinematic Three-Pass Star / 01 Guards (Respect Fog/Light)"; ui_category_closed = true;
+    ui_min = 0.001;
+    ui_max = 1.0;
+    ui_step = 0.001;
+    ui_tooltip = "Soft knee around core detection threshold.";
+> = 0.180000;
+
+uniform float FDVGOLD_CoreRadiusPixels <
+    ui_type = "slider";
+    ui_label = "Core Radius Pixels";
+    ui_category = "Fine Cell - Bloom - Cinematic Three-Pass Star / 01 Guards (Respect Fog/Light)"; ui_category_closed = true;
+    ui_min = 0.5;
+    ui_max = 8.0;
+    ui_step = 0.01;
+    ui_tooltip = "Base core radius in pixels. Photosphere and corona are derived from this radius.";
+> = 1.600000;
+
+uniform float FDVGOLD_CoreIntensity <
+    ui_type = "slider";
+    ui_label = "Core Intensity";
+    ui_category = "Fine Cell - Bloom - Cinematic Three-Pass Star / 01 Guards (Respect Fog/Light)"; ui_category_closed = true;
+    ui_min = 0.0;
+    ui_max = 3.0;
+    ui_step = 0.001;
+    ui_tooltip = "Intensity of the core bloom stage.";
+> = 0.553000;
+
+uniform float FDVGOLD_PhotosphereStartCoreMul <
+    ui_type = "slider";
+    ui_label = "Photosphere Start (x Core)";
+    ui_category = "Fine Cell - Bloom - Cinematic Three-Pass Star / 01 Guards (Respect Fog/Light)"; ui_category_closed = true;
+    ui_min = 1.0;
+    ui_max = 8.0;
+    ui_step = 0.01;
+    ui_tooltip = "Start radius multiplier for photosphere halo. Use around 3x.";
+> = 1.000000;
+
+uniform float FDVGOLD_PhotosphereEndCoreMul <
+    ui_type = "slider";
+    ui_label = "Photosphere End (x Core)";
+    ui_category = "Fine Cell - Bloom - Cinematic Three-Pass Star / 01 Guards (Respect Fog/Light)"; ui_category_closed = true;
+    ui_min = 1.0;
+    ui_max = 12.0;
+    ui_step = 0.01;
+    ui_tooltip = "End radius multiplier for photosphere halo. Use around 5x.";
+> = 1.000000;
+
+uniform float FDVGOLD_PhotosphereIntensity <
+    ui_type = "slider";
+    ui_label = "Photosphere Intensity";
+    ui_category = "Fine Cell - Bloom - Cinematic Three-Pass Star / 01 Guards (Respect Fog/Light)"; ui_category_closed = true;
+    ui_min = 0.0;
+    ui_max = 3.45;
+    ui_step = 0.001;
+    ui_tooltip = "Intensity of the photosphere halo band.";
+> = 2.379000;
+
+uniform float FDVGOLD_PhotosphereHaloSharpness <
+    ui_type = "slider";
+    ui_label = "Halo Sharpness";
+    ui_category = "Fine Cell - Bloom - Cinematic Three-Pass Star / 01 Guards (Respect Fog/Light)"; ui_category_closed = true;
+    ui_min = 0.5;
+    ui_max = 4.0;
+    ui_step = 0.01;
+    ui_tooltip = "Higher values tighten the photosphere ring profile.";
+> = 1.550000;
+
+uniform float FDVGOLD_CoronaStartCoreMul <
+    ui_type = "slider";
+    ui_label = "Corona Start (x Core)";
+    ui_category = "Fine Cell - Bloom - Cinematic Three-Pass Star / 01 Guards (Respect Fog/Light)"; ui_category_closed = true;
+    ui_min = 1.0;
+    ui_max = 12.0;
+    ui_step = 0.01;
+    ui_tooltip = "Start distance of eruptive corona as a multiple of core radius.";
+> = 5.000000;
+
+uniform float FDVGOLD_CoronaEndCoreMul <
+    ui_type = "slider";
+    ui_label = "Corona End (x Core)";
+    ui_category = "Fine Cell - Bloom - Cinematic Three-Pass Star / 01 Guards (Respect Fog/Light)"; ui_category_closed = true;
+    ui_min = 2.0;
+    ui_max = 20.0;
+    ui_step = 0.01;
+    ui_tooltip = "Outer distance of eruptive corona as a multiple of core radius.";
+> = 12.000000;
+
+uniform float FDVGOLD_CoronaIntensity <
+    ui_type = "slider";
+    ui_label = "Corona Intensity";
+    ui_category = "Fine Cell - Bloom - Cinematic Three-Pass Star / 01 Guards (Respect Fog/Light)"; ui_category_closed = true;
+    ui_min = 0.0;
+    ui_max = 4.6;
+    ui_step = 0.001;
+    ui_tooltip = "Intensity of eruptive corona glow.";
+> = 2.954000;
+
+uniform float FDVGOLD_CoronaEruptionCount <
+    ui_type = "slider";
+    ui_label = "Eruption Count";
+    ui_category = "Fine Cell - Bloom - Cinematic Three-Pass Star / 01 Guards (Respect Fog/Light)"; ui_category_closed = true;
+    ui_min = 2.0;
+    ui_max = 24.0;
+    ui_step = 1.0;
+    ui_tooltip = "Number of eruptive corona streak sectors.";
+> = 9.000000;
+
+uniform float FDVGOLD_CoronaEruptionSharpness <
+    ui_type = "slider";
+    ui_label = "Eruption Sharpness";
+    ui_category = "Fine Cell - Bloom - Cinematic Three-Pass Star / 01 Guards (Respect Fog/Light)"; ui_category_closed = true;
+    ui_min = 0.5;
+    ui_max = 8.0;
+    ui_step = 0.01;
+    ui_tooltip = "Higher values make sharper eruptive streaks.";
+> = 3.200000;
+
+uniform float FDVGOLD_WhiteGoldWarmth <
+    ui_type = "slider";
+    ui_label = "White Gold Warmth";
+    ui_category = "Fine Cell - Bloom - Cinematic Three-Pass Star / 01 Guards (Respect Fog/Light)"; ui_category_closed = true;
+    ui_min = 0.0;
+    ui_max = 1.0;
+    ui_step = 0.001;
+    ui_tooltip = "Warms bloom toward a pale white-gold tone.";
+> = 0.450000;
+
+uniform float FDVGOLD_BloomSaturation <
+    ui_type = "slider";
+    ui_label = "Bloom Saturation";
+    ui_category = "Fine Cell - Bloom - Cinematic Three-Pass Star / 01 Guards (Respect Fog/Light)"; ui_category_closed = true;
+    ui_min = 0.0;
+    ui_max = 2.0;
+    ui_step = 0.001;
+    ui_tooltip = "Saturation control for the bloom contribution.";
+> = 1.150000;
+
+uniform int FDVGOLD_ToneMapFinal <
+    ui_type = "combo";
+    ui_label = "Tone Map Final";
+    ui_category = "Fine Cell - Bloom - Cinematic Three-Pass Star / 01 Guards (Respect Fog/Light)"; ui_category_closed = true;
+    ui_items = "No\0Yes\0";
+    ui_tooltip = "Applies a soft tonemap to protect highlights after bloom composite.";
+> = 0;
+
+texture2D FDVGOLD_CoreTex
+{
+    Width = BUFFER_WIDTH / FDVGOLD_BUFFER_SCALE_LITERAL;
+    Height = BUFFER_HEIGHT / FDVGOLD_BUFFER_SCALE_LITERAL;
+    Format = RGBA16F;
+};
+
+texture2D FDVGOLD_PhotosphereTex
+{
+    Width = BUFFER_WIDTH / FDVGOLD_BUFFER_SCALE_LITERAL;
+    Height = BUFFER_HEIGHT / FDVGOLD_BUFFER_SCALE_LITERAL;
+    Format = RGBA16F;
+};
+
+texture2D FDVGOLD_CoronaTex
+{
+    Width = BUFFER_WIDTH / FDVGOLD_BUFFER_SCALE_LITERAL;
+    Height = BUFFER_HEIGHT / FDVGOLD_BUFFER_SCALE_LITERAL;
+    Format = RGBA16F;
+};
+
+sampler2D FDVGOLD_CoreSampler
+{
+    Texture = FDVGOLD_CoreTex;
+};
+
+sampler2D FDVGOLD_PhotosphereSampler
+{
+    Texture = FDVGOLD_PhotosphereTex;
+};
+
+sampler2D FDVGOLD_CoronaSampler
+{
+    Texture = FDVGOLD_CoronaTex;
+};
+
+float2 FDVGOLD_Pixel() { return float2(BUFFER_RCP_WIDTH, BUFFER_RCP_HEIGHT); }
+float2 FDVGOLD_BloomPixel() { return FDVGOLD_Pixel() * FDVGOLD_BUFFER_SCALE_LITERAL; }
+float3 FDVGOLD_Source(float2 uv) { return tex2D(ReShade::BackBuffer, saturate(uv)).rgb; }
+float3 FDVGOLD_CoreSource(float2 uv) { return tex2D(FDVGOLD_CoreSampler, saturate(uv)).rgb; }
+float3 FDVGOLD_PhotosphereSource(float2 uv) { return tex2D(FDVGOLD_PhotosphereSampler, saturate(uv)).rgb; }
+float3 FDVGOLD_CoronaSource(float2 uv) { return tex2D(FDVGOLD_CoronaSampler, saturate(uv)).rgb; }
+float FDVGOLD_Luma(float3 c) { return dot(c, float3(0.2126, 0.7152, 0.0722)); }
+
+float FDVGOLD_Hash12(float2 p)
+{
+    return frac(sin(dot(p, float2(127.1, 311.7))) * 43758.5453);
+}
+
+float3 FDVGOLD_ApplyWhiteGoldTone(float3 color)
+{
+    float3 whiteGold = float3(1.0, 0.965, 0.90);
+    float3 warmed = lerp(color, color * whiteGold, saturate(FDVGOLD_WhiteGoldWarmth));
+    float luma = FDVGOLD_Luma(warmed);
+    return lerp(luma.xxx, warmed, FDVGOLD_BloomSaturation);
+}
+
+float FDVGOLD_CoreMask(float3 sourceColor)
+{
+    float sourceLuma = FDVGOLD_Luma(sourceColor);
+    return smoothstep(
+        FDVGOLD_CoreThreshold,
+        FDVGOLD_CoreThreshold + max(0.00001, FDVGOLD_CoreSoftness),
+        sourceLuma);
+}
+
+float FDVGOLD_QualityScale()
+{
+    if (FDVGOLD_QualityTier == 0) return 0.42;
+    if (FDVGOLD_QualityTier == 1) return 0.62;
+    if (FDVGOLD_QualityTier == 2) return 0.80;
+    return 1.00;
+}
+
+int FDVGOLD_PhotosphereSampleCount()
+{
+    float scale = saturate(FDVGOLD_RayBudgetScale) * FDVGOLD_QualityScale();
+    int count = (int)floor(12.0 * scale + 0.5);
+    return clamp(count, 3, 12);
+}
+
+int FDVGOLD_CoronaSampleCount()
+{
+    float scale = saturate(FDVGOLD_RayBudgetScale) * FDVGOLD_QualityScale();
+    int count = (int)floor(16.0 * scale + 0.5);
+    return clamp(count, 4, 16);
+}
+
+float4 FDVGOLD_CorePassPS(float4 position : SV_Position, float2 uv : TEXCOORD) : SV_Target
+{
+    float2 px = FDVGOLD_Pixel();
+    float3 c = FDVGOLD_Source(uv);
+    float m = FDVGOLD_CoreMask(c);
+    float2 r = px * FDVGOLD_CoreRadiusPixels;
+
+    float3 axis = 0.0;
+    axis += FDVGOLD_Source(uv + float2(r.x, 0.0));
+    axis += FDVGOLD_Source(uv + float2(-r.x, 0.0));
+    axis += FDVGOLD_Source(uv + float2(0.0, r.y));
+    axis += FDVGOLD_Source(uv + float2(0.0, -r.y));
+    axis *= 0.25;
+
+    float mAxis = 0.0;
+    mAxis += FDVGOLD_CoreMask(FDVGOLD_Source(uv + float2(r.x, 0.0)));
+    mAxis += FDVGOLD_CoreMask(FDVGOLD_Source(uv + float2(-r.x, 0.0)));
+    mAxis += FDVGOLD_CoreMask(FDVGOLD_Source(uv + float2(0.0, r.y)));
+    mAxis += FDVGOLD_CoreMask(FDVGOLD_Source(uv + float2(0.0, -r.y)));
+    mAxis *= 0.25;
+
+    float3 coreColor = (c * m + axis * mAxis) * 0.5;
+    coreColor = FDVGOLD_ApplyWhiteGoldTone(coreColor) * FDVGOLD_CoreIntensity;
+    return float4(coreColor, 1.0);
+}
+
+float4 FDVGOLD_PhotospherePassPS(float4 position : SV_Position, float2 uv : TEXCOORD) : SV_Target
+{
+    float2 px = FDVGOLD_BloomPixel();
+    float coreRadius = max(0.5, FDVGOLD_CoreRadiusPixels);
+    float ringStart = coreRadius * min(FDVGOLD_PhotosphereStartCoreMul, FDVGOLD_PhotosphereEndCoreMul);
+    float ringEnd = coreRadius * max(FDVGOLD_PhotosphereStartCoreMul, FDVGOLD_PhotosphereEndCoreMul);
+    float ringMid = 0.5 * (ringStart + ringEnd);
+
+    float3 halo = 0.0;
+    float weight = 0.0;
+
+    int sampleCount = FDVGOLD_PhotosphereSampleCount();
+    float sampleCountF = max(1.0, float(sampleCount));
+
+    for (int i = 0; i < 12; ++i)
+    {
+        // Cost-responsive gating: inactive taps skip trig and texture fetches entirely.
+        if (i < sampleCount)
+        {
+            float t = (float(i) + 0.5) / sampleCountF;
+            float angle = t * 6.28318530718;
+            float2 dir = float2(cos(angle), sin(angle));
+
+            float3 sA = FDVGOLD_CoreSource(uv + dir * px * ringStart);
+            float3 sB = FDVGOLD_CoreSource(uv + dir * px * ringMid);
+            float3 sC = FDVGOLD_CoreSource(uv + dir * px * ringEnd);
+
+            float wA = 0.85;
+            float wB = 1.0;
+            float wC = 0.85;
+
+            halo += (sA * wA + sB * wB + sC * wC);
+            weight += (wA + wB + wC);
+        }
+    }
+
+    halo /= max(0.00001, weight);
+    float haloLuma = pow(saturate(FDVGOLD_Luma(halo)), max(0.5, FDVGOLD_PhotosphereHaloSharpness));
+    halo *= haloLuma * FDVGOLD_PhotosphereIntensity;
+    halo = FDVGOLD_ApplyWhiteGoldTone(halo);
+    return float4(halo, 1.0);
+}
+
+float4 FDVGOLD_CoronaPassPS(float4 position : SV_Position, float2 uv : TEXCOORD) : SV_Target
+{
+    float2 px = FDVGOLD_BloomPixel();
+    float coreRadius = max(0.5, FDVGOLD_CoreRadiusPixels);
+    float coronaStart = coreRadius * min(FDVGOLD_CoronaStartCoreMul, FDVGOLD_CoronaEndCoreMul);
+    float coronaEnd = coreRadius * max(FDVGOLD_CoronaStartCoreMul, FDVGOLD_CoronaEndCoreMul);
+    float span = max(0.00001, coronaEnd - coronaStart);
+    float phase = FDVGOLD_Hash12(uv * float2(BUFFER_WIDTH, BUFFER_HEIGHT)) * 6.28318530718;
+
+    float3 corona = 0.0;
+    float totalWeight = 0.0;
+
+    int sampleCount = FDVGOLD_CoronaSampleCount();
+    float sampleCountF = max(1.0, float(sampleCount));
+
+    for (int i = 0; i < 16; ++i)
+    {
+        // Cost-responsive gating: inactive taps skip trig and texture fetches entirely.
+        if (i < sampleCount)
+        {
+            float t = (float(i) + 0.5) / sampleCountF;
+            float angle = t * 6.28318530718;
+            float erupt = pow(saturate(0.5 + 0.5 * sin(angle * max(2.0, FDVGOLD_CoronaEruptionCount) + phase)), max(0.5, FDVGOLD_CoronaEruptionSharpness));
+            float jitter = lerp(0.75, 1.30, FDVGOLD_Hash12(float2(float(i) * 13.1, float(i) * 7.7) + uv * 31.0));
+            float2 dir = float2(cos(angle), sin(angle));
+
+            float r0 = coronaStart + span * 0.20 * jitter;
+            float r1 = coronaStart + span * 0.55 * jitter;
+            float r2 = coronaStart + span * 0.90 * jitter;
+
+            float3 p0 = FDVGOLD_PhotosphereSource(uv + dir * px * r0);
+            float3 p1 = FDVGOLD_PhotosphereSource(uv + dir * px * r1);
+            float3 p2 = FDVGOLD_PhotosphereSource(uv + dir * px * r2);
+            float3 coreMid = FDVGOLD_CoreSource(uv + dir * px * r1) * 0.35;
+
+            float w0 = (0.80 + 0.20 * erupt);
+            float w1 = (1.00 + 0.40 * erupt);
+            float w2 = (0.90 + 0.60 * erupt);
+
+            corona += (p0 * w0 + (p1 + coreMid) * w1 + p2 * w2);
+            totalWeight += (w0 + w1 + w2);
+        }
+    }
+
+    corona /= max(0.00001, totalWeight);
+    corona *= FDVGOLD_CoronaIntensity;
+    corona = FDVGOLD_ApplyWhiteGoldTone(corona);
+    return float4(corona, 1.0);
+}
+
+float4 FDVGOLD_FinalCompositePS(float4 position : SV_Position, float2 uv : TEXCOORD) : SV_Target
+{
+    float3 sourceColor = FDVGOLD_Source(uv);
+    float3 coreColor = FDVGOLD_CoreSource(uv);
+    float3 photosphereColor = FDVGOLD_PhotosphereSource(uv);
+    float3 coronaColor = FDVGOLD_CoronaSource(uv);
+
+    float coreMask = saturate(FDVGOLD_CoreMask(sourceColor));
+    float coreHot = saturate(FDVGOLD_Luma(sourceColor) * 1.35);
+    float coreProtect = saturate(coreMask * coreHot * FDVGOLD_CoreRespectStrength);
+
+    float3 coreContribution = coreColor;
+    if (FDVGOLD_CorePolicy == 1)
+    {
+        coreContribution *= (1.0 - coreProtect);
+    }
+
+    float3 bloom = coreContribution + photosphereColor + coronaColor;
+    bloom *= FDVGOLD_MasterIntensity;
+
+    float3 finalColor = sourceColor + bloom;
+    if (FDVGOLD_ToneMapFinal == 1)
+    {
+        finalColor = finalColor / (1.0 + finalColor);
+    }
+
+    if (FDVGOLD_DebugView == 1) return float4(coreColor, 1.0);
+    if (FDVGOLD_DebugView == 2) return float4(photosphereColor, 1.0);
+    if (FDVGOLD_DebugView == 3) return float4(coronaColor, 1.0);
+    if (FDVGOLD_DebugView == 4) return float4(bloom, 1.0);
+    return float4(finalColor, 1.0);
+}
+
+technique fine_dream_vision_of_gold_after_the_Fourth_Gate_visions_of_the_Fifth_Gate <
+    ui_label = "Fine Cell - Bloom - Cinematic Three-Pass Star";
+    ui_tooltip = "Three-pass light source bloom: core, photosphere halo, and eruptive corona.";
+>
+{
+    pass
+    {
+        VertexShader = PostProcessVS;
+        PixelShader = FDVGOLD_CorePassPS;
+        RenderTarget = FDVGOLD_CoreTex;
+    }
+
+    pass
+    {
+        VertexShader = PostProcessVS;
+        PixelShader = FDVGOLD_PhotospherePassPS;
+        RenderTarget = FDVGOLD_PhotosphereTex;
+    }
+
+    pass
+    {
+        VertexShader = PostProcessVS;
+        PixelShader = FDVGOLD_CoronaPassPS;
+        RenderTarget = FDVGOLD_CoronaTex;
+    }
+
+    pass
+    {
+        VertexShader = PostProcessVS;
+        PixelShader = FDVGOLD_FinalCompositePS;
+    }
+}
+
+
+
+
+
