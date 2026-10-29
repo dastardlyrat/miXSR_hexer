@@ -1,5 +1,20 @@
 <img width="2560" height="1440" alt="XCom2 2026-06-09 10-51-28_240" src="https://github.com/user-attachments/assets/b80b9892-3f78-4548-9fff-0fe1c54e338e" />
+
 # miXSR_hexer
+
+An RC3-era ReShade shader cabinet for studying stylization, image shaping,
+shared-mask orchestration, fog and light protection, and diagnostic views.
+The project preserves both active effects and disabled historical variants
+so their claims and processing paths can be inspected together.
+
+**Status:** restricted preview and audit source. Read [LICENSE.md](LICENSE.md)
+before use. Public source availability does not change the supplied restrictions
+or promote a shader capability label to a verified result.
+
+**Start here:** [Current status](#current-status) · [Usage rights](#usage-rights) ·
+[First rule](#first-rule) · [Run order](#recommended-run-order) ·
+[Repository walk](#repository-walk) · [Review workflow](#review-and-contribution) ·
+[Credits](#credits).
 
 ## INTO THE LOOKING GLASS
 
@@ -510,6 +525,31 @@ When migrating to a cleaner API or public OpenSurface line:
 - centralize debug vocabulary;
 - keep historical claims out of production docs unless verified;
 - record every mismatch.
+
+## Review and contribution
+
+Use the existing repository walk as an inspection map. Start with the
+orchestrator and its shared controls, then follow one dependent family at a
+time. Keep the distinction between a file's stated capability, its visible
+code path, and an observed runtime result.
+
+For a focused change:
+
+1. Identify the effect and the include files that supply its inputs and guards.
+2. State the claimed behavior and the actual calculation or pass being changed.
+3. Compile in ReShade and preserve the first relevant error or warning.
+4. Inspect the effect's diagnostic outputs before judging the final image.
+5. Compare the observed result with the intended contract and record any
+   remaining mismatch.
+
+The documentation pass preserves the shader bytes, source notices, and credits.
+It does not establish new compile or visual results. Disabled `.fx.disabled`
+files remain historical variants rather than silently becoming active effects.
+
+Some source headers refer to a separate license-notice filename that is absent
+from this tree. The repository-level restriction notice is [LICENSE.md](LICENSE.md);
+the supplied file headers are retained without rewriting their ownership or
+permission statements.
 
 ## Source
 
