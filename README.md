@@ -571,3 +571,11 @@ File headers in this snapshot attribute copyright to:
 Repository restriction notice attributes the repository to:
 
 - dastardlyrat
+
+## Project directory and related work
+
+[Browse the dastardlyrat project directory](https://dastardlyrat.github.io/).
+
+- [Occult-Box](https://github.com/dastardlyrat/Occult-Box)
+- [Lazara-Reshade-Revival-Package](https://github.com/dastardlyrat/Lazara-Reshade-Revival-Package)
+- [OpenSurface](https://github.com/dastardlyrat/OpenSurface)
